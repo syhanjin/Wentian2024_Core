@@ -70,6 +70,11 @@ void Error_Handler(void);
 #define DEBUG 1
 
 #define UPPER_CMD_LENGTH 8
+#define CHASSIS_CMD_LENGTH 12
+
+#define CHASSIS_UART_HANDLE (&huart3)
+
+// #define MAX_SPEED 255
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus

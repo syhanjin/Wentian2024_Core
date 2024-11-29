@@ -33,11 +33,21 @@
 /* USER CODE BEGIN PTD */
 typedef enum
 {
-  CHASSIS_FORWARD = 0x01,
-  CHASSIS_BACKWARD = 0x02,
-  CHASSIS_LEFT = 0x04,
-  CHASSIS_RIGHT = 0x08,
+  // 移动动作组
+  CHASSIS_FORWARD = 0x01U,
+  CHASSIS_BACKWARD = 0x02U,
+  CHASSIS_LEFT = 0x04U,
+  CHASSIS_RIGHT = 0x08U,
+  // 奇葩操作，旋转动作组
+  CHASSIS_ANTICLOCKWISE = 0x03U,
+  CHASSIS_CLOCKWISE = 0x0CU,
+  // 预设动作组，四个动作只能同时执行一个
+  CHASSIS_TO_SLOPE = 0x10U,
+  CHASSIS_TO_TOP = 0x20U,
+  CHASSIS_TO_BOTTOM = 0x40U,
+  CHASSIS_TO_RIM = 0x80U,
 } Chassis_State_t;
+
 
 /* USER CODE END PTD */
 
@@ -55,12 +65,19 @@ typedef enum
 
 /* USER CODE BEGIN PV */
 uint8_t cmd_rb[UPPER_CMD_LENGTH];
+uint8_t cmd_chassis_tb[CHASSIS_CMD_LENGTH];
+
+uint8_t chassis_state;
+
+// float chassis_vx, chassis_vy, ///< 底盘速度
+//       chassis_omega, ///< 底盘角速度
+//       chassis_x, chassis_y; ///< 底盘位移
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-
+void Chassis_SendCMD(uint8_t cmd, uint8_t* data1, uint8_t* data2);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -90,15 +107,108 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t Size)
   }
 }
 
+void Chassis_State_Handler(uint8_t state, uint8_t speed)
+{
+  if (state == chassis_state) return;
+  // 当之前存在正在执行的动作组，拒绝被状态消失打断
+  if ((chassis_state & 0xF0) && (chassis_state | state) == chassis_state) return;
+  uint8_t cmd = 0x07;
+  float data1 = 0, data2 = 0;
+  // 检测动作组变化，只对动作新增敏感
+  if (((state | chassis_state) & 0xF0) != (chassis_state & 0xF0))
+  {
+    cmd = 0x07;
+    if (state & CHASSIS_TO_SLOPE)
+    {
+      data1 = 100;
+      data2 = 0;
+    } else if (state & CHASSIS_TO_TOP)
+    {
+      data1 = 0;
+      data2 = 150;
+    } else if (state & CHASSIS_TO_BOTTOM)
+    {
+      data1 = 0;
+      data2 = -150;
+    } else if (state & CHASSIS_TO_RIM)
+    {
+      data1 = -100;
+      data2 = 0;
+    }
+  } else
+  {
+    // TODO: 重新根据一些速度极限数据分配速度
+    uint8_t vx = 0, vy = 0, omega = 0;
+    if ((state & CHASSIS_ANTICLOCKWISE) == CHASSIS_ANTICLOCKWISE)
+      omega += speed;
+    else
+    {
+      if (state & CHASSIS_FORWARD)
+        vy += speed;
+      if (state & CHASSIS_BACKWARD)
+        vy -= speed;
+    }
+    if ((state & CHASSIS_CLOCKWISE) == CHASSIS_CLOCKWISE)
+      omega -= speed;
+    else
+    {
+      if (state & CHASSIS_LEFT)
+        vx -= speed;
+      if (state & CHASSIS_RIGHT)
+        vx += speed;
+    }
+    if (omega)
+    {
+      cmd = 0x04;
+      data1 = 4.8 / 255.0 * omega;
+    } else if (vx || vy)
+    {
+      cmd = 0x05;
+      data1 = vx, data2 = vy;
+    }
+  }
+  chassis_state = state;
+  Chassis_SendCMD(cmd, (uint8_t*)&data1, (uint8_t*)&data2);
+}
+
 void CMD_Handler(uint8_t cmd, uint8_t data[4])
 {
   switch (cmd)
   {
   case 0x05:
-    printf("%c%c%c%c\n", data[0], data[1], data[2], data[3]);
+    // printf("%c%c%c%c\n", data[0], data[1], data[2], data[3]);
+    Chassis_State_Handler(data[0], data[1]);
     break;
   default: ;
   }
+}
+
+void Chassis_SendCMD(uint8_t cmd, uint8_t* data1, uint8_t* data2)
+{
+  // 协议头
+  cmd_chassis_tb[0] = 0x0F;
+  // 指令位
+  cmd_chassis_tb[1] = cmd;
+  // 数据组1
+  cmd_chassis_tb[2] = *(data1 + 0);
+  cmd_chassis_tb[3] = *(data1 + 1);
+  cmd_chassis_tb[4] = *(data1 + 2);
+  cmd_chassis_tb[5] = *(data1 + 3);
+  // 数据组2
+  cmd_chassis_tb[6] = *(data2 + 0);
+  cmd_chassis_tb[7] = *(data2 + 1);
+  cmd_chassis_tb[8] = *(data2 + 2);
+  cmd_chassis_tb[9] = *(data2 + 3);
+  // 协议尾
+  cmd_chassis_tb[CHASSIS_CMD_LENGTH - 2] = cmd;
+  // 校验和
+  cmd_chassis_tb[CHASSIS_CMD_LENGTH - 1] = 0;
+  for (int i = 0; i < CHASSIS_CMD_LENGTH - 1; i++)
+    cmd_chassis_tb[CHASSIS_CMD_LENGTH - 1] += cmd_chassis_tb[i];
+
+  // 发送指令
+  // 在 115200 的波特率下发送 12 个字节大约需要 1.04 ms，在目前的情况下发送间隔 > 80ms，故不需要考虑多次发送占用问题
+  HAL_UART_Transmit(CHASSIS_UART_HANDLE, cmd_chassis_tb, CHASSIS_CMD_LENGTH, HAL_MAX_DELAY);
 }
 
 /* USER CODE END 0 */
