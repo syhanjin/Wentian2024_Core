@@ -138,7 +138,7 @@ void Chassis_State_Handler(uint8_t state, uint8_t speed)
   } else
   {
     // TODO: 重新根据一些速度极限数据分配速度
-    uint8_t vx = 0, vy = 0, omega = 0;
+    float vx = 0, vy = 0, omega = 0;
     if ((state & CHASSIS_ANTICLOCKWISE) == CHASSIS_ANTICLOCKWISE)
       omega += speed;
     else
@@ -189,18 +189,21 @@ void Chassis_SendCMD(uint8_t cmd, uint8_t* data1, uint8_t* data2)
   cmd_chassis_tb[0] = 0x0F;
   // 指令位
   cmd_chassis_tb[1] = cmd;
-  // 数据组1
-  cmd_chassis_tb[2] = *(data1 + 0);
-  cmd_chassis_tb[3] = *(data1 + 1);
-  cmd_chassis_tb[4] = *(data1 + 2);
-  cmd_chassis_tb[5] = *(data1 + 3);
-  // 数据组2
-  cmd_chassis_tb[6] = *(data2 + 0);
-  cmd_chassis_tb[7] = *(data2 + 1);
-  cmd_chassis_tb[8] = *(data2 + 2);
-  cmd_chassis_tb[9] = *(data2 + 3);
+  if (cmd != 0x02 && cmd != 0x03)
+  {
+    // 数据组1
+    cmd_chassis_tb[2] = *(data1 + 0);
+    cmd_chassis_tb[3] = *(data1 + 1);
+    cmd_chassis_tb[4] = *(data1 + 2);
+    cmd_chassis_tb[5] = *(data1 + 3);
+    // 数据组2
+    cmd_chassis_tb[6] = *(data2 + 0);
+    cmd_chassis_tb[7] = *(data2 + 1);
+    cmd_chassis_tb[8] = *(data2 + 2);
+    cmd_chassis_tb[9] = *(data2 + 3);
+  }
   // 协议尾
-  cmd_chassis_tb[CHASSIS_CMD_LENGTH - 2] = cmd;
+  cmd_chassis_tb[CHASSIS_CMD_LENGTH - 2] = 0xF0;
   // 校验和
   cmd_chassis_tb[CHASSIS_CMD_LENGTH - 1] = 0;
   for (int i = 0; i < CHASSIS_CMD_LENGTH - 1; i++)
@@ -254,7 +257,7 @@ int main(void)
 #if DEBUG
   printf("Ble Ready!\n");
 #endif
-
+  Chassis_SendCMD(0x02, 0, 0);
   /* USER CODE END 2 */
 
   /* Infinite loop */
