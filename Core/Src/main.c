@@ -109,7 +109,11 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t Size)
 
 void Chassis_State_Handler(uint8_t state, uint8_t speed)
 {
-  if (state == chassis_state) return;
+  if (state == chassis_state)
+  {
+    Chassis_SendCMD(0x77, 0, 0);
+    return;
+  }
   // 当之前存在正在执行的动作组，拒绝被状态消失打断
   if ((chassis_state & 0xF0) && (chassis_state | state) == chassis_state) return;
   uint8_t cmd = 0x07;
@@ -189,7 +193,7 @@ void Chassis_SendCMD(uint8_t cmd, uint8_t* data1, uint8_t* data2)
   cmd_chassis_tb[0] = 0x0F;
   // 指令位
   cmd_chassis_tb[1] = cmd;
-  if (cmd != 0x02 && cmd != 0x03)
+  if (cmd != 0x02 && cmd != 0x03 && cmd != 0x77)
   {
     // 数据组1
     cmd_chassis_tb[2] = *(data1 + 0);
