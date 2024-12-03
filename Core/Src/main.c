@@ -164,7 +164,7 @@ void Chassis_State_Handler(uint8_t state, uint8_t speed)
     if (omega)
     {
       cmd = 0x04;
-      data1 = 4.8 / 255.0 * omega;
+      data1 = 10 / 255.0 * omega;
     } else if (vx || vy)
     {
       cmd = 0x05;
@@ -215,7 +215,8 @@ void Chassis_SendCMD(uint8_t cmd, uint8_t* data1, uint8_t* data2)
 
   // 发送指令
   // 在 115200 的波特率下发送 12 个字节大约需要 1.04 ms，在目前的情况下发送间隔 > 80ms，故不需要考虑多次发送占用问题
-  HAL_UART_Transmit(CHASSIS_UART_HANDLE, cmd_chassis_tb, CHASSIS_CMD_LENGTH, HAL_MAX_DELAY);
+  HAL_UART_Transmit(CHASSIS_UART_HANDLE, cmd_chassis_tb, CHASSIS_CMD_LENGTH, 0xFFFF);
+  // HAL_UART_Transmit_IT(CHASSIS_UART_HANDLE, cmd_chassis_tb, CHASSIS_CMD_LENGTH);
 }
 
 /* USER CODE END 0 */
